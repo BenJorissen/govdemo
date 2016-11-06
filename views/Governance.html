@@ -1,0 +1,83 @@
+﻿<div class="jumbotron">
+    <h1>Contoso's <b>DEMO </b> Service Catalogue</h1>
+    <h2>Please choose what you want to deploy to the Microsoft Azure Platform</h2>
+    <h4>Note that this is just an extreme small subset of what is possible on the Azure platform.</h4>
+</div>
+<div ng-controller="GovernanceController" ng-cloak>
+    <div class="row">
+        <div class="col-lg-6">
+            <div class="input-group">
+                <span class="input-group-btn">
+                    <button class="btn btn-default" type="button"><span class="glyphicon glyphicon-search" aria-hidden="true"></span></button>
+                </span>
+                <input type="text" class="form-control" placeholder="filter" ng-model="filter" />
+            </div>
+        </div>
+        <div class="col-lg-6">
+            <div class="btn-group pull-right">
+                <button type="button" ng-class="['btn', 'btn-default', !showTable ? 'active' : '']" ng-click="changeView()"><span class="glyphicon glyphicon-th" aria-hidden="true"></span></button>
+                <button type="button" ng-class="['btn', 'btn-default', showTable ? 'active' : '']" ng-click="changeView()"><span class="glyphicon glyphicon-menu-hamburger" aria-hidden="true"></span></button>
+            </div>
+        </div>
+    </div>
+    <div class="row" ng-show="showTable">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Type</th>
+                    <th>Size</th>
+                    <th>Specs</th>
+                    <th>Internal Pricing</th>
+                    <th>Deploy Now</th>
+                    <th>Visualize</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr ng-repeat="template in templates">
+                    <td>{{template.type}}</td>
+                    <td>{{template.size}}</td>
+                    <td>{{template.specs}}</td>
+                    <td>{{template.internalprice}}</td>
+                    <td>
+                        <span ng-if="template.approved || !template.needsApproval">
+                            <a class="btn btn-azure" href="https://portal.azure.com/#create/Microsoft.Template/uri/{{template.uri}}" target="_blank"><img src="images/cloud.png" /> Deploy to Azure</a>
+                        </span>
+                        <span ng-if="template.needsApproval && !template.approved">
+                            <button class="btn btn-default" ng-click="template.approved = false">Request</button>
+                        </span>
+                         <span ng-if="template.needsApproval && !template.approved">
+                            <button class="btn btn-danger" ng-click="template.approved = true">Approve</button>
+                        </span>
+                    </td>
+                    <td>
+                        <a class="btn btn-azure" href="http://armviz.io/#/?load={{template.uri}}" target="_blank">
+                            <img src="images/cloud.png" /> Visualize
+                        </a>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+    <div class="row" ng-show="!showTable">
+        <div class="col-lg-4 col-md-6 col-sm-12" ng-repeat="template in templates | filter: filter">
+            <div class="card card-resource">
+                <div class="text-heading5">{{template.type}}</div>
+                <div>
+                    <div>{{template.size}}</div>
+                    <div>{{template.specs}}</div>
+                    <div>{{template.internalprice}}</div>
+                    <div ng-if="template.approved || !template.needsApproval">
+                        <a class="btn btn-azure" href="https://portal.azure.com/#create/Microsoft.Template/uri/{{template.uri}}" target="_blank"><img src="images/cloud.png" /> Deploy to Azure</a>
+                        <a class="btn btn-azure" href="http://armviz.io/#/?load={{template.uri}}" target="_blank"><img src="images/cloud.png" /> Visualize</a>
+                    </div>
+                    <div ng-if="template.needsApproval && !template.approved">
+                        <button class="btn btn-default" ng-click="template.approved = false"><a href="mailto:youritsupport@contoso.com?subject=Request Approval Service Catalogue Item" target="_blank"> Request </a></button>
+                        <button class="btn btn-danger" ng-click="template.approved = true">Approve</button>
+                        <a class="btn btn-azure" href="http://armviz.io/#/?load={{template.uri}}" target="_blank"><img src="images/cloud.png" /> Visualize</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>

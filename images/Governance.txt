@@ -1,0 +1,322 @@
+﻿########################################################################################################################
+##DISCLAIMER: THE EXAMPLE SCRIPTS BELOW ARE PROVIDED WITH NO WARRANTY AND TO USE AT YOUR OWN RISK FOR TESTING PURPOSES##
+########################################################################################################################
+
+
+######################################
+##Azure Governance built-in features##
+######################################
+
+#Login
+add-azureRMaccount
+Login-AzureRmAccount
+
+########################################################################################################################
+# 1. RBAC
+#https://azure.microsoft.com/en-us/documentation/articles/role-based-access-control-configure/
+#https://azure.microsoft.com/en-us/documentation/articles/role-based-access-control-what-is/
+#https://blogs.technet.microsoft.com/enterprisemobility/2015/12/10/custom-roles-in-azure-rbac-is-now-ga/
+########################################################################################################################
+
+Get-azureRmRoleDefinition | FT Name, Description
+
+Get-AzureRmRoleDefinition contributor | FL Actions, NotActions
+
+(Get-AzureRmRoleDefinition "Owner").actions
+
+Get-AzureRmRoleAssignment -ResourceGroupName demogovernance
+
+Get-AzureRmRoleAssignment -SignInName chris@hotmail.Com -ExpandPrincipalGroups
+
+Get-AzureRmRoleAssignment -IncludeClassicAdministrators
+
+Get-AzureRmADPrincipal -SearchString "Christophe"
+
+#assign a role to a specific user
+
+New-AzureRmRoleAssignment -SignInName chris@hotmail.Com -RoleDefinitionName "virtual machine contributor" -ResourceGroupName demogovernance 
+
+Remove-AzureRmRoleAssignment -SignInName chris@hotmail.Com -RoleDefinitionName "virtual machine contributor" -ResourceGroupName demogovernance 
+
+
+#assign a role to a specific group
+
+#To get the object ID for an Azure AD Group use:
+
+Get-AzureRmADGroup -SearchString azurebackup
+
+#To get the object ID for an Azure AD Service Principal, or application, use:
+
+Get-AzureRmADServicePrincipal -SearchString <service name in quotes>
+
+New-AzureRmRoleAssignment -ObjectId <object id> -RoleDefinitionName <role name in quotes> -ResourceName <resource name> -ResourceType <resource type> -ParentResource <parent resource> -ResourceGroupName <resource group name>
+
+
+#View specific operations for which you can create customer roles
+Get-AzureRmProviderOperation microsoft.compute/*
+Get-AzureRmProviderOperation microsoft.compute/virtualmachines/*
+Get-AzureRmProviderOperation microsoft.storage/*
+Get-AzureRmProviderOperation microsoft.network/*
+Get-AzureRmProviderOperation microsoft.keyvault/*
+
+
+
+
+########################################################################################################################
+# 2. TAGGING
+#https://azure.microsoft.com/en-us/documentation/articles/resource-group-using-tags/
+########################################################################################################################
+
+(Get-AzureRmResource -ResourceName vna1 -ResourceGroupName demogovernance).Tags | %{ $_.Name + ": " + $_.Value }
+
+New-AzureRmTag -Name "TST"
+New-AzureRmTag -Name "ACC"
+New-AzureRmTag -Name "PRD"
+
+New-AzureRmTag -Name "test" 
+
+Remove-AzureRmTag -Name "test"
+
+Get-AzureRmTag
+
+#Assign an "environment" tag to a VM inside a specific resource group
+$rmGroupName = "demogovernance"
+Set-AzureRmResourceGroup -Name $rmGroupName -Tag @( @{ Name="environment"; Value="TST"})
+$tags = (Get-AzureRmResourceGroup -Name $rmGroupName).Tags
+Get-AzureRmResource |`
+ where {$_.ResourceType -eq "Microsoft.Compute/virtualMachines" -and $_.ResourceGRoupName -eq $rmGroupName} | `
+   ForEach-Object {Set-AzureRmResource -Tag $tags -ResourceId $_.ResourceId -force}
+ 
+Find-AzureRmResource -TagName environment -TagValue TST | %{ $_.ResourceName }
+
+#Assign a "OS" tag to a VM inside a specific resource group
+$rmGroupName = "Rhel72"
+Set-AzureRmResourceGroup -Name $rmGroupName -Tag @( @{ Name="vmOS"; Value="RedHat"})
+$tags = (Get-AzureRmResourceGroup -Name $rmGroupName).Tags
+Get-AzureRmResource |`
+ where {$_.ResourceType -eq "Microsoft.Compute/virtualMachines" -and $_.ResourceGRoupName -eq $rmGroupName} | `
+   ForEach-Object {Set-AzureRmResource -Tag $tags -ResourceId $_.ResourceId -force}
+
+#Find all resources with a specific TAG
+Find-AzureRmResource -TagName vmOS -TagValue RedHat | %{ $_.ResourceName }
+Find-AzureRmResource -TagName environment -TagValue TST | %{ $_.ResourceName }
+
+
+
+
+
+########################################################################################################################
+# 3. LOCKS
+#https://azure.microsoft.com/en-us/documentation/articles/resource-group-lock-resources/
+########################################################################################################################
+
+#Create for example a lock on a resource group to prevent accidental deletion
+New-AzureRmResourceLock -LockLevel CanNotDelete -LockName LockRGDelete -ResourceGroupName demogovernance -LockNotes "This lock prevents production resource groups from accidental deletion"
+
+Remove-AzureRmResourceLock -LockLevel CanNotDelete -LockName LockRGDelete -ResourceGroupName demogovernance 
+
+Get-AzureRmResourceLock 
+
+
+
+
+########################################################################################################################
+# 4. POLICIES 
+#https://azure.microsoft.com/en-us/documentation/articles/resource-manager-policy/ 
+#https://azure.microsoft.com/en-us/blog/azure-resource-policy-ga/
+########################################################################################################################
+
+New-AzureRmPolicyDefinition -Name "VMPolicyDefinition" -DisplayName "Virtual Machine policy definition" -Policy "{""if"":{""source"":""action"",""equals"":""Microsoft.Compute/virtualMachines/write""},""then"":{""effect"":""deny""}}"
+
+Get-AzureRmPolicyDefinition -Name "VMPolicyDefinition"
+
+#view built in policies
+Get-AzureRmPolicyDefinition
+
+#set a custom definition for a policy
+$PolicyDefinition = Get-AzureRmPolicyDefinition -Name "VMPolicyDefinition"
+Set-AzureRmPolicyDefinition -Id $PolicyDefinition.ResourceId -Description "Updated policy to not allow virtual machines"
+
+
+#Create the policy definition to allow creation of VM's only in specifc Azure Data Centers
+New-AzureRmPolicyDefinition -Name regionPolicyDefinition -Description "Policy to allow resource creation only in certain regions" -Policy '{  
+  "if" : {
+    "not" : {
+      "field" : "location",
+      "in" : ["northeurope" , "westeurope"]
+    }
+  },
+  "then" : {
+    "effect" : "deny"
+  }
+}'   
+
+#assign the policy to a resource group
+$ResourceGroup = Get-AzureRmResourceGroup -Name "demogovernance"
+$Policy = Get-AzureRmPolicyDefinition -Name "regionPolicyDefinition"
+New-AzureRmPolicyAssignment -Name "VirtualMachinePolicyAssignment" -PolicyDefinition $Policy -Scope $ResourceGroup.ResourceId
+
+Get-AzureRmPolicyDefinition -Name regionPolicyDefinition
+
+#set a custom definition for a policy
+$PolicyDefinition = Get-AzureRmPolicyDefinition -Name "regionPolicyDefinition"
+Set-AzureRmPolicyDefinition -Id $PolicyDefinition.ResourceId -Description "Policy to allow resource creation only in Western Europe and Northern Europe Azure DC's"
+
+
+#Create the policy definition to limit the allowed type of storage accounts
+New-AzureRmPolicyDefinition -Name NoPremiumStoragePolicyDefinition -Description "Policy to prevent premium storage accounts from being created" -Policy '{
+  "if": {
+    "allOf": [
+      {
+        "field": "type",
+        "equals": "Microsoft.Storage/storageAccounts"
+      },
+      {
+        "not": {
+          "allof": [
+            {
+              "field": "Microsoft.Storage/storageAccounts/sku.name",
+              "in": ["Standard_LRS", "Standard_GRS"]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "then": {
+    "effect": "deny"
+  }
+}'
+
+Get-AzureRmPolicyDefinition -Name NoPremiumStoragePolicyDefinition
+
+#assign the policy to a resource group
+
+$ResourceGroup = Get-AzureRmResourceGroup -Name "demogovernance"
+$Policy = Get-AzureRmPolicyDefinition -Name "NoPremiumStoragePolicyDefinition"
+New-AzureRmPolicyAssignment -Name "VirtualMachinePolicyAssignmentStorage" -PolicyDefinition $Policy -Scope $ResourceGroup.ResourceId
+
+
+$ResourceGroup = Get-AzureRmResourceGroup -Name "demogovernance"
+$Policy = Get-AzureRmPolicyDefinition -Name "NoPremiumStoragePolicyDefinition"
+get-AzureRmPolicyAssignment -Name "VirtualMachinePolicyAssignmentStorage" -PolicyDefinition $Policy -Scope $ResourceGroup.ResourceId
+
+
+#Create the policy definition to limit the allowed vm types & sizes to deploy
+New-AzureRmPolicyDefinition -Name LimitSizesPolicyDefinition -Description "Policy to prevent all VM Sizes" -Policy '{
+  "if": {
+    "allOf": [
+      {
+        "field": "type",
+        "equals": "Microsoft.Compute/virtualMachines"
+      },
+      {
+        "not": {
+          "field": "Microsoft.Compute/virtualMachines/sku.name",
+          "in": [ "Standard_D2_v2", "Standard_F8" ]
+        }
+      }
+    ]
+  },
+  "then": {
+    "effect": "deny"
+  }
+}'
+
+
+$ResourceGroup = Get-AzureRmResourceGroup -Name "demogovernance"
+$Policy = Get-AzureRmPolicyDefinition -Name "LimitSizesPolicyDefinition"
+New-AzureRmPolicyAssignment -Name "VirtualMachinePolicyAssignmentSize" -PolicyDefinition $Policy -Scope $ResourceGroup.ResourceId
+
+
+
+
+#The below policy appends costCenter tag with a predefined value if no tags are present. 
+
+{
+  "if": {
+    "field": "tags",
+    "exists": "false"
+  },
+  "then": {
+    "effect": "append",
+    "details": [
+      {
+        "field": "tags",
+        "value": {"costCenter":"myDepartment" }
+      }
+    ]
+  }
+}
+
+
+
+
+
+#Conditions can contain these values:
+#- Equals
+#- Like
+#- Contains
+#- In
+#- ContainsKey
+
+#The Logical Operators is:
+#- Not – Checks a single condition, or logical operator
+#- And – All conditions must match
+#- Or
+
+#Effect can be either:
+#Policy supports three types of effect - deny, audit, and append. 
+#Deny: generates an event in the audit log and fails the request
+#Audit: generates an event in audit log but does not fail the request
+#Append: adds the defined set of fields to the request 
+
+#To specify what the policy should check, we use Field and Source. At the moment Source only supports ‘action’ which refers to an action on the resource provider. Field supports the following values:
+#- Name
+#- Kind
+#- Type
+#- Locations
+#- Tags
+
+
+########################################################################################################################
+#Key Vault
+# https://azure.microsoft.com/en-us/documentation/articles/key-vault-whatis/
+########################################################################################################################
+
+
+#Create a vault
+New-AzureRmKeyVault -VaultName 'DGKeyVault' -ResourceGroupName 'demogovernance' -Location 'North Europe'
+
+#add a key
+$key = Add-AzureKeyVaultKey -VaultName 'DGKeyVault' -Name 'MyFirstKey' -Destination 'Software'
+$Key.key.kid
+
+#add a password
+$secretvalue = ConvertTo-SecureString 'Pa$$w0rd' -AsPlainText -Force
+$secret = Set-AzureKeyVaultSecret -VaultName 'DGKeyVault' -Name 'SQLPassword' -SecretValue $secretvalue
+
+#view password in plain text
+$secret.SecretValueText
+
+
+#add a database connection string to the vault
+$secretdbstring = ConvertTo-SecureString 'Data Source=.\;Initial Catalog=MySecureDBName;Integrated Security=True'  -AsPlainText -Force
+$secretdbconnection = Set-AzureKeyVaultSecret -VaultName 'DGKeyVault' -Name 'SQLConnectionString' -SecretValue $secretdbstring
+
+
+#view connection string 
+$secretdbconnection.SecretValueText
+
+
+#assign permissions to a service principal
+Set-AzureRmKeyVaultAccessPolicy -VaultName 'DGKeyVault' -ServicePrincipalName 6c62e312-cce0-4897-98fb-f4320fc7b7dd -PermissionsToKeys decrypt,sign
+Set-AzureRmKeyVaultAccessPolicy -VaultName 'DGKeyVault' -ServicePrincipalName 6c62e312-cce0-4897-98fb-f4320fc7b7dd -PermissionsToSecrets Get
+
+#get the vault, secrets & keys
+Get-AzureRmKeyVault
+Get-AzureKeyVaultSecret -VaultName 'DGKeyVault'
+Get-AzureKeyVaultKey -VaultName 'DGKeyVault'
+
+#Remove-AzureRmKeyVault -VaultName 'DGKeyVault'
+
